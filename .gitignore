@@ -55,6 +55,7 @@ Thumbs.db
 *.pem
 *.p12
 *.key
+GoogleService-Info.plist
 
 # Archives & build artifacts
 *.ipa

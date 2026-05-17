@@ -1,0 +1,33 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /programs/{programId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.trainerId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.trainerId;
+    }
+
+    match /relationships/{relId} {
+      allow read: if request.auth != null &&
+        (request.auth.uid == resource.data.trainerId || request.auth.uid == resource.data.traineeId);
+      allow update: if request.auth != null &&
+        (request.auth.uid == resource.data.trainerId || request.auth.uid == resource.data.traineeId);
+      // create handled via Cloud Function (invite code validation)
+    }
+
+    match /sessions/{sessionId} {
+      allow read, write: if request.auth != null &&
+        (request.auth.uid == resource.data.traineeId || request.auth.uid == resource.data.trainerId);
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.traineeId;
+    }
+
+    // inviteCodes managed via Cloud Functions only
+    match /inviteCodes/{code} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -57,21 +57,50 @@ UI Update  ← View ← ViewModel ← Repository ← Listener/Response
 
 ---
 
+## Dependency Injection
+
+`DependencyContainer` is `@Observable` and created once in `SpotMeApp`. It is injected into the SwiftUI environment at root level. Views access it via `@Environment(DependencyContainer.self)` and pass services/repositories to ViewModels through their `init` parameters.
+
+```swift
+// SpotMeApp — create and inject
+@State private var container = DependencyContainer()
+WindowGroup {
+    RootView()
+        .environment(appState)
+        .environment(container)
+}
+
+// View — access and inject into ViewModel
+@Environment(DependencyContainer.self) private var container
+viewModel = AuthViewModel(authService: container.authService, userRepository: container.userRepository)
+
+// ViewModel — receives deps via init (no singleton, no Firebase import)
+init(authService: AuthService, userRepository: any UserRepositoryProtocol)
+```
+
+No third-party DI framework. For MVP, this approach is sufficient and fully testable.
+
+---
+
 ## Project Folder Structure
 
 ```
 SpotMe/
 ├── SpotMe/
 │   ├── App/
-│   │   ├── SpotMeApp.swift             — @main entry point
-│   │   ├── AppState.swift              — Global app state (auth status, role)
-│   │   └── DependencyContainer.swift   — Service/repository initialization
+│   │   ├── SpotMeApp.swift             — @main entry, Firebase init, emulator setup
+│   │   ├── AppState.swift              — Global auth + role state (@Observable)
+│   │   ├── DependencyContainer.swift   — All services/repos (@Observable, env-injected)
+│   │   ├── RootView.swift              — Auth gate → role selection → home routing
+│   │   ├── TrainerHomeView.swift       — Trainer tab container
+│   │   └── TraineeHomeView.swift       — Trainee tab container
 │   │
 │   ├── Features/
 │   │   ├── Auth/
 │   │   │   ├── Views/
 │   │   │   │   ├── SignInView.swift
-│   │   │   │   └── SignUpView.swift
+│   │   │   │   ├── SignUpView.swift
+│   │   │   │   └── RoleSelectionView.swift
 │   │   │   └── ViewModels/
 │   │   │       └── AuthViewModel.swift
 │   │   │
@@ -110,13 +139,17 @@ SpotMe/
 │   │   │   ├── Exercise.swift
 │   │   │   ├── Session.swift
 │   │   │   ├── SetRecord.swift
-│   │   │   └── Relationship.swift
+│   │   │   ├── Relationship.swift
+│   │   │   ├── InviteCode.swift
+│   │   │   └── AppError.swift          — AuthError, NetworkError, DataError, PermissionError
 │   │   │
 │   │   ├── Repositories/
 │   │   │   ├── Protocols/
+│   │   │   │   ├── UserRepositoryProtocol.swift
 │   │   │   │   ├── ProgramRepositoryProtocol.swift
 │   │   │   │   ├── SessionRepositoryProtocol.swift
 │   │   │   │   └── RelationshipRepositoryProtocol.swift
+│   │   │   ├── UserRepository.swift
 │   │   │   ├── ProgramRepository.swift
 │   │   │   ├── SessionRepository.swift
 │   │   │   └── RelationshipRepository.swift
@@ -133,7 +166,8 @@ SpotMe/
 │   │   ├── Tokens/
 │   │   │   ├── Colors.swift
 │   │   │   ├── Typography.swift
-│   │   │   └── Spacing.swift
+│   │   │   ├── Spacing.swift
+│   │   │   └── CornerRadius.swift
 │   │   ├── Components/
 │   │   │   ├── PrimaryButton.swift
 │   │   │   ├── InputField.swift
@@ -146,31 +180,17 @@ SpotMe/
 │       └── Localizable.strings
 │
 ├── SpotMe.xcodeproj
-├── docs/                               — Documentation (this folder)
 ├── firebase/
-│   ├── functions/                      — Cloud Functions source
-│   │   ├── src/
-│   │   │   └── index.ts
-│   │   ├── package.json
-│   │   └── tsconfig.json
-│   ├── firestore.rules                 — Security rules
-│   └── firebase.json                   — Firebase project config
-└── CLAUDE.md                           — Agent context
+│   ├── firebase.json               — Emulator ports config
+│   ├── firestore.rules             — Firestore security rules
+│   ├── firestore.indexes.json      — Composite index definitions
+│   └── functions/
+│       ├── src/index.ts            — Cloud Functions (generateInviteCode, acceptInviteCode)
+│       ├── package.json
+│       └── tsconfig.json
+├── docs/                           — All project documentation
+└── CLAUDE.md                       — Agent context
 ```
-
----
-
-## Dependency Injection
-
-Simple approach using SwiftUI's environment system:
-
-```swift
-// DependencyContainer creates all services/repositories once
-// App injects them into the environment at root level
-// ViewModels receive dependencies via init parameters
-```
-
-No third-party DI framework. For MVP, manual injection is sufficient.
 
 ---
 
@@ -223,7 +243,7 @@ Firebase SDK throws → Repository catches → throws typed AppError →
 ViewModel catches → sets error state → View displays alert/banner
 ```
 
-Error types:
+Error types (all in `Core/Models/AppError.swift`):
 - `AuthError` — sign-in failures, token expiry
 - `NetworkError` — offline (handled gracefully)
 - `DataError` — missing/corrupt documents

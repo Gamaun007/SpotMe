@@ -17,7 +17,7 @@ xcodebuild build -scheme SpotMe -destination 'platform=iOS Simulator,name=iPhone
 xcodebuild test -scheme SpotMe -destination 'platform=iOS Simulator,name=iPhone 16'
 
 # Start Firebase emulators (local dev)
-cd firebase && firebase emulators:start
+cd firebase && firebase emulators:start --project demo-spotme
 ```
 
 ## Architecture
@@ -30,6 +30,7 @@ View → ViewModel → Repository (protocol) → Firebase SDK
 
 - Views never import Firebase
 - ViewModels never access Firestore directly — always via Repository
+- ViewModels receive dependencies via init parameters (injected from `DependencyContainer` via SwiftUI environment)
 - Business logic that affects multiple users → Cloud Function, not client
 - Models are plain `Codable` structs with no Firebase dependencies
 
@@ -39,20 +40,66 @@ See `docs/infra/architecture.md` for full layer diagram and data flow.
 
 ```
 SpotMe/
-├── App/              — @main entry, AppState, DependencyContainer
+├── App/
+│   ├── SpotMeApp.swift         — @main entry, Firebase setup, emulator config
+│   ├── AppState.swift          — Global auth + role state (@Observable)
+│   ├── DependencyContainer.swift — All services/repositories, injected via SwiftUI env
+│   ├── RootView.swift          — Root navigation (auth → role selection → home)
+│   ├── TrainerHomeView.swift   — Trainer tab container
+│   └── TraineeHomeView.swift   — Trainee tab container
 ├── Features/
-│   ├── Auth/         — Sign-in/sign-up views + AuthViewModel
-│   ├── Programs/     — Program CRUD views + ProgramViewModel
-│   ├── Relationships/— Invite code + trainee list views
-│   ├── Sessions/     — Active session + history views
-│   └── Monitoring/   — Real-time trainer view of trainee session
+│   ├── Auth/
+│   │   ├── Views/              — SignInView, SignUpView, RoleSelectionView
+│   │   └── ViewModels/         — AuthViewModel
+│   ├── Programs/
+│   │   ├── Views/              — ProgramListView, ProgramDetailView, ProgramEditorView
+│   │   └── ViewModels/         — ProgramViewModel
+│   ├── Relationships/
+│   │   ├── Views/              — InviteCodeView, TraineeListView
+│   │   └── ViewModels/         — RelationshipViewModel
+│   ├── Sessions/
+│   │   ├── Views/              — ActiveSessionView, SessionHistoryView
+│   │   └── ViewModels/         — SessionViewModel
+│   └── Monitoring/
+│       ├── Views/              — LiveSessionView
+│       └── ViewModels/         — MonitoringViewModel
 ├── Core/
-│   ├── Models/       — Codable structs (User, Program, Session, etc.)
-│   ├── Repositories/ — Firebase data access; protocol + implementation per entity
-│   ├── Services/     — AuthService, RealtimeService
-│   └── Extensions/   — Firestore+Codable, View+Extensions
-├── DesignSystem/     — Tokens (Colors, Typography, Spacing), Components, Modifiers
-└── Resources/        — Assets.xcassets, Localizable.strings
+│   ├── Models/                 — User, Program, Exercise, Session, SetRecord, Relationship, InviteCode, AppError
+│   ├── Repositories/
+│   │   ├── Protocols/          — UserRepositoryProtocol, ProgramRepositoryProtocol, SessionRepositoryProtocol, RelationshipRepositoryProtocol
+│   │   └── (implementations)  — UserRepository, ProgramRepository, SessionRepository, RelationshipRepository
+│   ├── Services/               — AuthService, RealtimeService
+│   └── Extensions/             — Firestore+Codable, View+Extensions
+├── DesignSystem/
+│   ├── Tokens/                 — Colors, Typography, Spacing, CornerRadius
+│   ├── Components/             — PrimaryButton, InputField, Card
+│   └── Modifiers/              — CardStyle
+└── Resources/
+    ├── Assets.xcassets
+    └── Localizable.strings
+```
+
+## Firebase Setup
+
+**Local development** uses Firebase Emulator Suite with a demo project — no real Firebase project required.
+
+```
+Auth emulator:      localhost:9099
+Firestore emulator: localhost:8080
+Functions emulator: localhost:5001
+Emulator UI:        localhost:4000
+```
+
+The app auto-connects to emulators in `DEBUG` builds via programmatic `FirebaseOptions` with `projectID = "demo-spotme"`. Release builds require a real `GoogleService-Info.plist` (not committed — see `.gitignore`).
+
+Firebase config lives in `firebase/`:
+```
+firebase/
+├── firebase.json           — Emulator port config
+├── firestore.rules         — Security rules
+├── firestore.indexes.json  — Composite indexes
+└── functions/
+    └── src/index.ts        — Cloud Functions (generateInviteCode, acceptInviteCode)
 ```
 
 ## Conventions
@@ -62,13 +109,14 @@ SpotMe/
 - `Codable` for all Firestore document serialization
 - One file per type — `SessionView.swift`, `SessionViewModel.swift`, `SessionRepository.swift`
 - Typed errors thrown from Repository, caught at ViewModel, displayed in View as alert/banner
-- Error types: `AuthError`, `NetworkError`, `DataError`, `PermissionError`
-- No third-party DI — manual injection via SwiftUI environment
+- Error types: `AuthError`, `NetworkError`, `DataError`, `PermissionError` (all in `Core/Models/AppError.swift`)
+- DI: `DependencyContainer` is `@Observable`, injected at root via `.environment(container)`, accessed in Views via `@Environment(DependencyContainer.self)`
+- ViewModels take services/repositories as init parameters — no singleton access
 - Naming: PascalCase types, camelCase properties/methods
 
 ## Key Constraints
 
-- Trainee UX must be extremely simple — minimal taps, large targets, clear feedback
+- Trainee UX must be extremely simple — minimal taps, large targets (min 44pt, prefer 56pt+ for primary actions), clear feedback
 - Real-time session sync must be <2s latency (Firestore snapshot listeners)
 - App must work offline — Firestore persistence enabled, UI never blocks on network
 - Firebase Spark (free) plan — design for efficiency, avoid unnecessary reads/writes
