@@ -45,7 +45,11 @@ An iOS application called **SpotMe** — a workout tracking app built around the
 
 ## Tech Stack
 
-- TBD
+- iOS 17+ / SwiftUI / Swift 5.9+
+- Firebase (Firestore, Auth, Cloud Functions)
+- Swift Package Manager
+
+See `docs/infra/tech-stack.md` for full rationale and version details.
 
 ## Repository
 

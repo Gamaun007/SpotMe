@@ -46,6 +46,9 @@ Thumbs.db
 *.iml
 .vscode/
 
+# Claude Code
+.claude/settings.local.json
+
 # Environment & secrets
 .env
 .env.*

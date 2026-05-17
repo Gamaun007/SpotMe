@@ -155,8 +155,7 @@ SpotMe/
 │   │   └── tsconfig.json
 │   ├── firestore.rules                 — Security rules
 │   └── firebase.json                   — Firebase project config
-└── .github/
-    └── copilot-instructions.md         — Agent context
+└── CLAUDE.md                           — Agent context
 ```
 
 ---
